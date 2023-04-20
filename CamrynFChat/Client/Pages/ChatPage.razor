@@ -5,17 +5,22 @@
 
 <div class="form-group">
     <label>
-        Username:
+        UserName:
         <input @bind="userInput" size="63" disabled="@(!IsConnected)"/>
     </label>
 </div>
 <div class="form-group">
     <label>
         Message:
-        <input @bind="messageInput" size="50" disabled="@(!IsConnected)"/>
+        <input @bind="messageInput" size="50" @onclick="SendUserTypingNotification" disabled="@(!IsConnected)" />
     </label>
 </div>
 <button @onclick="Send" disabled="@(!IsConnected)">Send</button>
+
+@if(UserMessages.Count > 0)
+{
+    <p>@UserMessages.Last()</p>
+}
 
 <hr>
 
@@ -29,6 +34,7 @@
 @code {
     private HubConnection hubConnection;
     private List<string> messages = new List<string>();
+    private List<string> UserMessages = new List<string>();
     private string userInput;
     private string messageInput;
 
@@ -45,11 +51,41 @@
             StateHasChanged();
         });
 
+        hubConnection.On<string>("UserTyping", (user) =>
+        {
+            var encodedMsg = $"{user} is typing a message...";
+            UserMessages.Add(encodedMsg);
+            StateHasChanged();
+        });
+
+       hubConnection.On<string>("ReceiveAnonMessage", (message) =>
+        {
+            var encodedMsg = $"Anonymous: {message}";
+            messages.Add(encodedMsg);
+            StateHasChanged();
+        });
+
+
         await hubConnection.StartAsync();
     }
 
-    async Task Send() =>
-        await hubConnection.SendAsync("SendMessage", userInput, messageInput);
+    async Task Send(){
+        if(!string.IsNullOrEmpty(userInput)){
+            await hubConnection.SendAsync("SendMessage", userInput, messageInput);
+        }
+        else
+        {
+            await hubConnection.SendAsync("SendAnonMessage", messageInput);
+        }
+    }
+
+    async Task SendUserTypingNotification(){
+        if(!string.IsNullOrEmpty(userInput))
+        {
+            await hubConnection.SendAsync("SendUserTyping", userInput);
+        }
+       
+    }
 
     public bool IsConnected =>
         hubConnection.State == HubConnectionState.Connected;
